@@ -1,0 +1,27 @@
+name: "local-asr"
+description: "使用 faster-whisper tiny 模型对视频进行本地离线语音识别，提取音频并生成 SRT 格式字幕文件。支持中文（zh）和英文（en）语言。首次运行会自动下载 tiny 模型（约 75MB）。"
+parameters:
+  type: object
+  properties:
+    video_path:
+      type: string
+      description: "MP4 视频文件的完整路径"
+    output_srt:
+      type: string
+      description: "输出 SRT 字幕文件的完整路径"
+    language:
+      type: string
+      description: "视频语言的 ISO 代码"
+      default: "zh"
+    model_size:
+      type: string
+      description: "faster-whisper 模型大小"
+      default: "tiny"
+      enum:
+        - "tiny"
+        - "tiny.en"
+        - "base"
+        - "small"
+  required:
+    - video_path
+    - output_srt

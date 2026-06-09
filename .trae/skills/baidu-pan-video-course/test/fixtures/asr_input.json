@@ -1,0 +1,10 @@
+{
+  "video_path": "/tmp/baidu_course_test/video_full.mp4",
+  "output_srt": "/tmp/baidu_course_test/subtitles.srt",
+  "language": "zh",
+  "model_size": "tiny",
+  "expected": {
+    "status": "failed",
+    "reason": "video file not found (expected in test - no actual video)"
+  }
+}

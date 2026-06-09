@@ -1,0 +1,12 @@
+{
+  "description": "模拟百度网盘 streaming URL 完整请求",
+  "streaming_url": "https://pan.baidu.com/share/streaming?channel=chunlei&uk=123456&fid=789012&sign=abcd1234×tamp=1700000000&shareid=12345&type=M3U8_AUTO_480&vip=0&jsToken=efgh5678&isplayer=1&check_blue=1&adToken=ijkl9012",
+  "cookie": "BDUSS=test_bduss_value; STOKEN=test_stoken; XFI=test_xfi; XFT=test_xft; PANPSC=test_panpsc",
+  "referer": "https://pan.baidu.com/s/1testShareId?pwd=test",
+  "workspace": "/tmp/baidu_course_test",
+  "threads": 2,
+  "expected": {
+    "output_mp4": "/tmp/baidu_course_test/video_full.mp4",
+    "segments_dir": "/tmp/baidu_course_test/segments"
+  }
+}

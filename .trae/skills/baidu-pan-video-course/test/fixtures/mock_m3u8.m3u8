@@ -1,0 +1,9 @@
+#EXTM3U
+#EXT-X-TARGETDURATION:10
+#EXTINF:10,
+https://bdct06.baidupcs.com/video/netdisk-videotran-xxx/MOCK_MD5_1_ts/MOCK_ETAG?ts_size=6291232&range=0-341031&tk=MOCK_TOKEN
+#EXTINF:10,
+https://bdct06.baidupcs.com/video/netdisk-videotran-xxx/MOCK_MD5_1_ts/MOCK_ETAG?ts_size=6291232&range=341032-605359&tk=MOCK_TOKEN
+#EXTINF:10,
+https://bdct07.baidupcs.com/video/netdisk-videotran-yyy/MOCK_MD5_1_ts/MOCK_ETAG?ts_size=5120000&range=605360-900000&tk=MOCK_TOKEN
+#EXT-X-ENDLIST

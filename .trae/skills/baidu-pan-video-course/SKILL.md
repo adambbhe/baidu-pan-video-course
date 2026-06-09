@@ -1,0 +1,358 @@
+---
+name: "baidu-pan-video-course"
+description: "从百度网盘分享链接下载视频，使用本地 faster-whisper ASR 提取字幕，自动生成 PPT 课件和 Word 笔记。当用户分享百度网盘视频链接并要求制作课件、转课程、下载视频做PPT时触发。"
+mode: agent
+context: fork
+custom-tools:
+  - "download-video"
+  - "local-asr"
+---
+
+# 百度网盘视频课程制作
+
+你是百度网盘视频课程制作助手，负责从百度网盘分享链接出发，自动完成视频下载、字幕提取、PPT 课件生成和 Word 笔记生成的完整流程。
+
+## Prerequisites
+
+**一键安装所有依赖：**
+```bash
+bash setup.sh
+```
+
+在开始之前，确认以下依赖已安装：
+
+| 依赖 | 安装方式 | 用途 |
+|------|----------|------|
+| `chrome-devtools` | OpenClaw 内置插件 | 浏览器自动化、Network 抓包 |
+| `officecli` | `curl -fsSL https://d.officecli.ai/install.sh \| bash` | PPT 和 DOCX 文件生成 |
+| Python 3 | 系统自带 | 下载脚本执行 |
+| `faster-whisper` | `pip install faster-whisper` | 本地 ASR 语音转文字 |
+| `ffmpeg` | `apt install ffmpeg` / `brew install ffmpeg` | 从视频提取音频 |
+| `brotli`（可选） | `pip install brotli` | 解压 br 压缩的 M3U8 响应 |
+
+## Workspace 路径约定
+
+默认 workspace 目录：
+```
+<当前工作目录>/workspace/baidu_course/
+```
+
+| 子目录/文件 | 用途 | 处理 |
+|------------|------|------|
+| `video_full.mp4` | 合并后的完整视频 | 完成后删除 |
+| `segments/` | TS 分片缓存目录 | 合并后删除 |
+| `subtitles.srt` | 最终字幕文件（SRT 格式） | 保留 |
+| `course_ppt.pptx` | 生成的教学课件 | 保留 |
+| `course_notes.docx` | 生成的课程笔记 | 保留 |
+| `frames/` | 视频关键帧截图 | 保留 |
+
+## Workflow
+
+### Step 1 — 收集用户信息
+
+使用 `AskUserQuestion` 收集以下必要信息（如用户尚未提供）：
+- 百度网盘分享链接（格式：`https://pan.baidu.com/s/<SHARE_ID>`）
+- 提取码（如有）
+- 百度账号 + 密码（如需登录）
+- 课程视频标题（用于 PPT/DOCX 标题生成）
+
+### Step 2 — 浏览器登录百度
+
+```
+chrome-devtools__navigate_page → https://pan.baidu.com
+chrome-devtools__take_snapshot
+```
+
+检查页面是否已登录：
+- 如页面含"登录"按钮：点击登录 → `chrome-devtools__fill_form` 填入账号密码 → 如需验证码则暂停并询问用户
+- 等待跳转后再次 `take_snapshot` 确认已登录
+
+### Step 3 — 导航到分享链接并加载视频
+
+```
+chrome-devtools__navigate_page(url="https://pan.baidu.com/s/{SHARE_ID}?pwd={PASSWORD}")
+```
+
+- 输入提取码（如需要）
+- 点击视频文件进入播放页面
+- `chrome-devtools__wait_for` 等待视频播放器出现（页面显示时长信息如 "24:34"）
+- **关键操作：** 拖动视频进度条到末尾附近，触发百度 streaming 按需加载所有分片
+
+### Step 4 — 从 DevTools Network 提取 Streaming URL
+
+```
+chrome-devtools__list_network_requests(resourceTypes=["xhr", "fetch"])
+```
+
+过滤条件：URL 包含 `share/streaming` 且 `type=M3U8`
+
+找到后：
+```
+chrome-devtools__get_network_request(reqid="<streaming_reqid>")
+```
+
+**必须提取的参数（HttpOnly，只能从 Network 请求获取，不能从 Cookie jar 读取）：**
+
+| 参数 | 来源 | 说明 |
+|------|------|------|
+| 完整 Streaming URL | 响应 URL | 含 `sign`、`jsToken`、`adToken` 等 query 参数 |
+| `Cookie` | Request Headers | 完整 Cookie 字符串（含 BDUSS、XFI、XFT、STOKEN 等） |
+| `Referer` | 当前页面 URL | 分享页面地址 |
+
+**Streaming URL 模板参考：**
+```
+https://pan.baidu.com/share/streaming
+  ?channel=chunlei
+  &uk=<USER_UK>
+  &fid=<FILE_ID>
+  &sign=<JS_SIGN>            # HttpOnly，从请求头提取
+  &timestamp=<UNIX_TS>
+  &shareid=<SHARE_ID>
+  &type=M3U8_AUTO_480         # 480p 流畅画质
+  &vip=0
+  &jsToken=<JS_TOKEN>         # HttpOnly
+  &isplayer=1
+  &check_blue=1
+  &adToken=<AD_TOKEN>
+```
+
+### Step 5 — 下载视频（调用 download-video 自定义工具）
+
+使用提取的参数调用 `download-video` 工具：
+
+```json
+{
+  "streaming_url": "<从 DevTools 提取的完整 streaming URL>",
+  "cookie": "<从 Request Headers 提取的完整 Cookie 字符串>",
+  "referer": "<分享页面 URL>",
+  "workspace": "<当前工作目录>/workspace/baidu_course",
+  "threads": 8
+}
+```
+
+该工具会：
+1. 下载 M3U8 播放列表
+2. 解析所有 TS 分片 URL
+3. 8 线程并发下载全部分片
+4. 二进制合并为完整 MP4 文件
+
+**注意事项：**
+- `sign` 有效期约几分钟，若下载中途出现 502/403，需从 DevTools 重新获取 fresh streaming URL
+- 刷新 token 后重新调用 `download-video`，工具会自动跳过已缓存的分片，增量补充缺失部分
+
+### Step 6 — 获取字幕（双轨策略）
+
+**优先方案：尝试百度 AI 字幕**
+
+在 DevTools Network 中查找字幕请求（URL 含 `type=M3U8_SUBTITLE_SRT`），或直接替换 streaming URL 中的 type 参数：
+```
+SUBTITLE_URL = STREAMING_URL.replace("M3U8_AUTO_480", "M3U8_SUBTITLE_SRT")
+```
+
+若百度提供了 AI 字幕（响应为纯 SRT 文本），直接保存到 `workspace/baidu_course/subtitles.srt`，跳过 Step 7。
+
+**兜底方案：本地 ASR**
+
+若百度未提供 AI 字幕，或字幕质量不佳，调用 `local-asr` 工具：
+
+```json
+{
+  "video_path": "<workspace>/baidu_course/video_full.mp4",
+  "output_srt": "<workspace>/baidu_course/subtitles.srt",
+  "language": "zh",
+  "model_size": "tiny"
+}
+```
+
+该工具会：
+1. 用 ffmpeg 提取视频音频为 16kHz 单声道 WAV
+2. 用 faster-whisper tiny 模型转录为文字
+3. 生成 SRT 格式字幕文件
+4. 清理临时音频文件
+
+### Step 7 — 分析字幕内容，规划课件结构
+
+读取 `subtitles.srt`，解析时间轴和文本内容：
+
+```python
+import re
+
+def parse_srt(text):
+    entries = []
+    for block in re.split(r'\n\n+', text.strip()):
+        lines = block.split('\n')
+        if len(lines) >= 3 and re.match(r'\d+$', lines[0]) and '-->' in lines[1]:
+            tc = lines[1].split('-->')[0].strip()
+            h, m, s = map(float, tc.split(':'))
+            entries.append({'time': h*3600 + m*60 + s, 'text': '\n'.join(lines[2:])})
+    return entries
+```
+
+基于字幕内容分析：
+- 识别课程主题和章节划分
+- 提取关键概念和要点
+- 规划 PPT 结构（封面 + 大纲 + 4-6 页内容 + 总结，共 7-9 页）
+
+### Step 8 — 生成 PPT 课件（officecli）
+
+**配色方案（森林苔藓色系）：**
+
+| 角色 | 色值 | 用途 |
+|------|------|------|
+| Primary | `#2C5F2D` | 封面背景、标题、深色卡片 |
+| Secondary | `#97BC62` | 次要卡片、浅色背景 |
+| Accent | `#5FAE65` | 按钮、高亮、强调 |
+| Text (dark) | `#333333` | 浅色背景上的正文 |
+| Text (light) | `#FFFFFF` | 深色背景上的正文 |
+| Muted | `#6B8E6B` | 标签、Caption、Footer |
+
+**字体：** Georgia（标题）+ Calibri（正文）
+
+**PPT 结构模板：**
+
+| 页 | 类型 | 内容 |
+|----|------|------|
+| 1 | 封面 | 课程标题 + 出处 + 口号 |
+| 2 | 大纲 | 课程目录（4-6项） |
+| 3-N | 内容 | 双栏卡片 / 2×3 网格 / 引用框 + 时间线（根据字幕内容选择布局） |
+| 末页 | 总结 | 三大要点 + 下期预告 |
+
+**officecli 命令示例：**
+
+```bash
+WORKSPACE="<完整路径>/workspace/baidu_course"
+FILE="${WORKSPACE}/course_ppt.pptx"
+officecli create "$FILE"
+officecli open "$FILE"
+
+# 封面
+officecli add "$FILE" / --type slide --prop layout=blank --prop background=2C5F2D
+officecli add "$FILE" /slide[1] --type shape --prop text="<课程标题>" \
+  --prop x=1.5cm --prop y=6cm --prop width=30cm --prop height=3cm \
+  --prop font=Georgia --prop size=44 --prop bold=true --prop color=FFFFFF --prop align=center
+
+# 使用 batch 模式批量添加卡片（推荐，避免命令间累积错误）
+cat <<'BATCHEOF' | officecli batch "$FILE"
+[
+  {"command":"add","parent":"/slide[3]","type":"shape","props":{"name":"Card1","preset":"roundRect","fill":"2C5F2D","line":"none","x":"1.5cm","y":"3cm","width":"14cm","height":"6cm","text":"<卡片1标题>\n<卡片1内容>","font":"Georgia","size":"22","bold":"true","color":"FFFFFF","align":"center","valign":"middle"}},
+  {"command":"add","parent":"/slide[3]","type":"shape","props":{"name":"Card2","preset":"roundRect","fill":"97BC62","line":"none","x":"17.5cm","y":"3cm","width":"14cm","height":"6cm","text":"<卡片2标题>\n<卡片2内容>","font":"Georgia","size":"22","bold":"true","color":"FFFFFF","align":"center","valign":"middle"}}
+]
+BATCHEOF
+
+# 检查溢出
+officecli view "$FILE" issues
+
+officecli close "$FILE"
+```
+
+**文字溢出修复：**
+```bash
+officecli set "$FILE" "/slide[N]/shape[@id=<ID>]" --prop size=14      # 减小字号
+officecli set "$FILE" "/slide[N]/shape[@id=<ID>]" --prop height=2.5cm # 增加盒子高度
+```
+
+### Step 9 — 截取关键帧
+
+浏览器必须保持在视频播放页面。使用 `chrome-devtools__evaluate_script` 控制视频跳转，然后截图。
+
+```bash
+WORKSPACE="<完整路径>/workspace/baidu_course"
+mkdir -p "${WORKSPACE}/frames"
+```
+
+**推荐截帧时间点（每 2 分钟一张）：**
+```
+0:30, 2:00, 4:00, 6:00, 8:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00
+```
+
+**逐个截帧示例：**
+```
+chrome-devtools__evaluate_script(function="() => { var v=document.querySelector('video'); if(v){v.currentTime=120;v.play();return'ok';}return'no'; }")
+chrome-devtools__wait_for(text=["2:", "02:"], timeout=5000)
+chrome-devtools__take_screenshot(filePath="<WORKSPACE>/frames/frame_2min.png")
+```
+
+**注意：**
+- 每次跳转后需 `wait_for` 确认视频时间显示更新
+- 如 `wait_for` 超时，尝试双击时间显示区域触发刷新
+- Headless Chrome 下 AudioNode 不可用，仅截静态帧，不使用 MediaRecorder
+
+### Step 10 — 生成 Word 文档（officecli）
+
+```bash
+WORKSPACE="<完整路径>/workspace/baidu_course"
+DOCFILE="${WORKSPACE}/course_notes.docx"
+officecli create "$DOCFILE"
+officecli open "$DOCFILE"
+
+# 封面标题
+officecli add "$DOCFILE" /body --type paragraph --prop text="《<课程标题>》课程笔记" \
+  --prop style=Heading1 --prop size=24pt --prop bold=true --prop spaceAfter=12pt
+
+# 副标题
+officecli add "$DOCFILE" /body --type paragraph --prop text="<课程出处/讲师>" \
+  --prop size=12pt --prop spaceAfter=24pt
+
+# 目录
+officecli add "$DOCFILE" /body --type toc --prop levels="1-3" --prop hyperlinks=true --prop title="目录"
+
+# 章节内容（基于字幕分析逐段添加，使用 officecli-docx skill 参考）
+# 每章插入对应时间点的关键帧截图
+
+# 插入关键帧示例
+officecli add "$DOCFILE" "/body/p[N]" --type picture \
+  --prop src="${WORKSPACE}/frames/frame_2min.png" \
+  --prop width=6in --prop alt="视频第2分钟截图"
+
+# Footer 页码
+officecli add "$DOCFILE" / --type footer --prop type=default --prop text="Page " --prop field=page --prop align=center
+
+officecli close "$DOCFILE"
+officecli validate "$DOCFILE"
+```
+
+### Step 11 — 清理视频文件
+
+```python
+import os, shutil
+
+WORKSPACE = "<完整路径>/workspace/baidu_course"
+for p in [f"{WORKSPACE}/video_full.mp4", f"{WORKSPACE}/segments/"]:
+    if os.path.isfile(p):
+        os.remove(p)
+    elif os.path.isdir(p):
+        shutil.rmtree(p)
+```
+
+保留文件：
+- `subtitles.srt` — SRT 字幕
+- `course_ppt.pptx` — PPT 课件
+- `course_notes.docx` — Word 笔记
+- `frames/` — 关键帧截图
+
+## 错误处理
+
+| 错误信息 | 原因 | 解决方案 |
+|----------|------|----------|
+| `Recorder not found` | 浏览器页面被重置 | 重新 `navigate_page` 到视频页 |
+| `sign` 过期（502/403） | JS token 过期 | 从 DevTools 重新获取 fresh streaming URL |
+| `ffprobe not found` | ffmpeg 未安装 | 安装 ffmpeg：`apt install ffmpeg` |
+| `officecli: command not found` | CLI 未加入 PATH | 重新运行安装脚本 |
+| `IndexError` SRT 解析 | 格式不匹配 | 改用 `re.split(r'\n\n+', text)` |
+| 幻灯片文字溢出 | 盒子太小 | `officecli set --prop size=14` 或 `--prop height=2.5cm` |
+| `faster-whisper` 模型下载失败 | 网络问题 | 手动下载 tiny 模型到 `~/.cache/huggingface/` |
+| 视频分片不完整 | 百度按需加载 | 滑动进度条触发更多分片请求 |
+
+## 已知限制
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| `sign` 几分钟过期 | JS 动态生成，HttpOnly | 重新从 DevTools 获取新 URL |
+| 视频分片不完整 | 百度 streaming 按需加载 | 滑动进度条触发更多分片 |
+| 无法提取音频 | Headless Chrome AudioNode 限制 | 使用本地 ffmpeg + faster-whisper |
+| 验证码阻挡登录 | 百度安全策略 | 请求用户手动输入验证码 |
+| faster-whisper 首次运行慢 | 需要下载 tiny 模型（~75MB） | 首次运行时自动下载，后续直接使用缓存 |
+
+---
+
+*本 Skill 基于太卜风水术01.mp4 实战验证的技术文档封装。百度网盘视频策略可能随版本更新变化，如遇接口变更请重新从 DevTools 提取 fresh URL。*

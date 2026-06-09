@@ -1,0 +1,26 @@
+name: "download-video"
+description: "从百度网盘 streaming URL 并发下载 TS 分片并合并为完整 MP4 视频文件。支持断点续传（跳过已缓存分片）和 8 线程并发下载。"
+parameters:
+  type: object
+  properties:
+    streaming_url:
+      type: string
+      description: "从 DevTools Network 提取的完整百度网盘 share/streaming URL（含 sign、jsToken、adToken 等参数）"
+    cookie:
+      type: string
+      description: "从 Request Headers 提取的完整 Cookie 字符串（含 BDUSS、XFI、XFT、STOKEN 等）"
+    referer:
+      type: string
+      description: "百度网盘分享页面 URL（用于 HTTP Referer 头）"
+    workspace:
+      type: string
+      description: "下载输出目录的完整路径（如 /tmp/baidu_course）"
+    threads:
+      type: integer
+      description: "并发下载线程数"
+      default: 8
+  required:
+    - streaming_url
+    - cookie
+    - referer
+    - workspace
