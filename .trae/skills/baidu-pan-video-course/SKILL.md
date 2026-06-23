@@ -1,6 +1,6 @@
 ---
 name: "baidu-pan-video-course"
-description: "从百度网盘分享链接下载视频，使用本地 faster-whisper ASR 提取字幕，自动生成 PPT 课件和 Word 笔记。当用户分享百度网盘视频链接并要求制作课件、转课程、下载视频做PPT时触发。"
+description: "从百度网盘分享链接下载视频，使用本地 faster-whisper ASR 提取字幕，自动生成 ASR 完整记录和视频总结报告。当用户分享百度网盘视频链接并要求转录、提取字幕、制作会议记录时触发。"
 mode: agent
 context: fork
 custom-tools:
@@ -11,7 +11,7 @@ custom-tools:
 
 # 百度网盘视频课程制作
 
-你是百度网盘视频课程制作助手，负责从百度网盘分享链接出发，自动完成视频下载、字幕提取、PPT 课件生成和 Word 笔记生成的完整流程。
+你是百度网盘视频课程制作助手，负责从百度网盘分享链接出发，自动完成视频下载、字幕提取、ASR 完整记录和视频总结报告的完整流程。
 
 ## Prerequisites
 
@@ -25,7 +25,6 @@ bash setup.sh
 | 依赖 | 安装方式 | 用途 |
 |------|----------|------|
 | `chrome-devtools` | OpenClaw 内置插件 | 浏览器自动化、Network 抓包 |
-| `officecli` | `curl -fsSL https://d.officecli.ai/install.sh \| bash` | PPT 和 DOCX 文件生成 |
 | `python-docx` | `pip install python-docx` | Word 报告文档生成 |
 | Python 3 | 系统自带 | 下载脚本执行 |
 | `faster-whisper` | `pip install faster-whisper` | 本地 ASR 语音转文字 |
@@ -47,7 +46,6 @@ bash setup.sh
 | `transcript_full.json` | 全量转录 JSON（含时间戳、置信度、单词级时间轴、说话人标签） | 保留 |
 | `transcript_detailed.txt` | 详细文字稿（含时间轴、说话人标记、按说话人分组） | 保留 |
 | `transcript_summary.json` | 转录总结（时长统计、说话人统计、各输出路径） | 保留 |
-| `course_ppt.pptx` | 生成的教学课件 | 保留 |
 | `course_notes.docx` | 生成的课程笔记 | 保留 |
 | `ASR_完整记录.docx` | ASR 完整转录记录 Word 文档（含说话人标记、时间轴、单词级详情） | 保留 |
 | `视频总结报告.docx` | 视频内容总结报告 Word 文档（摘要、要点、统计） | 保留 |
@@ -61,7 +59,7 @@ bash setup.sh
 - 百度网盘分享链接（格式：`https://pan.baidu.com/s/<SHARE_ID>`）
 - 提取码（如有）
 - 百度账号 + 密码（如需登录）
-- 课程视频标题（用于 PPT/DOCX 标题生成）
+- 课程视频标题（用于报告标题生成）
 
 ### Step 2 — 浏览器登录百度
 
@@ -189,88 +187,7 @@ SUBTITLE_URL = STREAMING_URL.replace("M3U8_AUTO_480", "M3U8_SUBTITLE_SRT")
 - 说话人识别基于 VAD 片段间的静默间隔和语速差异，无需额外模型（纯算法分析）
 - 支持的语言：zh（中文）、en（英文）、ja（日文）、ko（韩文）等
 
-### Step 7 — 分析字幕内容，规划课件结构
-
-读取 `subtitles.srt`，解析时间轴和文本内容：
-
-```python
-import re
-
-def parse_srt(text):
-    entries = []
-    for block in re.split(r'\n\n+', text.strip()):
-        lines = block.split('\n')
-        if len(lines) >= 3 and re.match(r'\d+$', lines[0]) and '-->' in lines[1]:
-            tc = lines[1].split('-->')[0].strip()
-            h, m, s = map(float, tc.split(':'))
-            entries.append({'time': h*3600 + m*60 + s, 'text': '\n'.join(lines[2:])})
-    return entries
-```
-
-基于字幕内容分析：
-- 识别课程主题和章节划分
-- 提取关键概念和要点
-- 规划 PPT 结构（封面 + 大纲 + 4-6 页内容 + 总结，共 7-9 页）
-
-### Step 8 — 生成 PPT 课件（officecli）
-
-**配色方案（森林苔藓色系）：**
-
-| 角色 | 色值 | 用途 |
-|------|------|------|
-| Primary | `#2C5F2D` | 封面背景、标题、深色卡片 |
-| Secondary | `#97BC62` | 次要卡片、浅色背景 |
-| Accent | `#5FAE65` | 按钮、高亮、强调 |
-| Text (dark) | `#333333` | 浅色背景上的正文 |
-| Text (light) | `#FFFFFF` | 深色背景上的正文 |
-| Muted | `#6B8E6B` | 标签、Caption、Footer |
-
-**字体：** Georgia（标题）+ Calibri（正文）
-
-**PPT 结构模板：**
-
-| 页 | 类型 | 内容 |
-|----|------|------|
-| 1 | 封面 | 课程标题 + 出处 + 口号 |
-| 2 | 大纲 | 课程目录（4-6项） |
-| 3-N | 内容 | 双栏卡片 / 2×3 网格 / 引用框 + 时间线（根据字幕内容选择布局） |
-| 末页 | 总结 | 三大要点 + 下期预告 |
-
-**officecli 命令示例：**
-
-```bash
-WORKSPACE="<完整路径>/workspace/baidu_course"
-FILE="${WORKSPACE}/course_ppt.pptx"
-officecli create "$FILE"
-officecli open "$FILE"
-
-# 封面
-officecli add "$FILE" / --type slide --prop layout=blank --prop background=2C5F2D
-officecli add "$FILE" /slide[1] --type shape --prop text="<课程标题>" \
-  --prop x=1.5cm --prop y=6cm --prop width=30cm --prop height=3cm \
-  --prop font=Georgia --prop size=44 --prop bold=true --prop color=FFFFFF --prop align=center
-
-# 使用 batch 模式批量添加卡片（推荐，避免命令间累积错误）
-cat <<'BATCHEOF' | officecli batch "$FILE"
-[
-  {"command":"add","parent":"/slide[3]","type":"shape","props":{"name":"Card1","preset":"roundRect","fill":"2C5F2D","line":"none","x":"1.5cm","y":"3cm","width":"14cm","height":"6cm","text":"<卡片1标题>\n<卡片1内容>","font":"Georgia","size":"22","bold":"true","color":"FFFFFF","align":"center","valign":"middle"}},
-  {"command":"add","parent":"/slide[3]","type":"shape","props":{"name":"Card2","preset":"roundRect","fill":"97BC62","line":"none","x":"17.5cm","y":"3cm","width":"14cm","height":"6cm","text":"<卡片2标题>\n<卡片2内容>","font":"Georgia","size":"22","bold":"true","color":"FFFFFF","align":"center","valign":"middle"}}
-]
-BATCHEOF
-
-# 检查溢出
-officecli view "$FILE" issues
-
-officecli close "$FILE"
-```
-
-**文字溢出修复：**
-```bash
-officecli set "$FILE" "/slide[N]/shape[@id=<ID>]" --prop size=14      # 减小字号
-officecli set "$FILE" "/slide[N]/shape[@id=<ID>]" --prop height=2.5cm # 增加盒子高度
-```
-
-### Step 9 — 截取关键帧
+### Step 7 — 截取关键帧
 
 浏览器必须保持在视频播放页面。使用 `chrome-devtools__evaluate_script` 控制视频跳转，然后截图。
 
@@ -296,41 +213,7 @@ chrome-devtools__take_screenshot(filePath="<WORKSPACE>/frames/frame_2min.png")
 - 如 `wait_for` 超时，尝试双击时间显示区域触发刷新
 - Headless Chrome 下 AudioNode 不可用，仅截静态帧，不使用 MediaRecorder
 
-### Step 10 — 生成 Word 文档（officecli）
-
-```bash
-WORKSPACE="<完整路径>/workspace/baidu_course"
-DOCFILE="${WORKSPACE}/course_notes.docx"
-officecli create "$DOCFILE"
-officecli open "$DOCFILE"
-
-# 封面标题
-officecli add "$DOCFILE" /body --type paragraph --prop text="《<课程标题>》课程笔记" \
-  --prop style=Heading1 --prop size=24pt --prop bold=true --prop spaceAfter=12pt
-
-# 副标题
-officecli add "$DOCFILE" /body --type paragraph --prop text="<课程出处/讲师>" \
-  --prop size=12pt --prop spaceAfter=24pt
-
-# 目录
-officecli add "$DOCFILE" /body --type toc --prop levels="1-3" --prop hyperlinks=true --prop title="目录"
-
-# 章节内容（基于字幕分析逐段添加，使用 officecli-docx skill 参考）
-# 每章插入对应时间点的关键帧截图
-
-# 插入关键帧示例
-officecli add "$DOCFILE" "/body/p[N]" --type picture \
-  --prop src="${WORKSPACE}/frames/frame_2min.png" \
-  --prop width=6in --prop alt="视频第2分钟截图"
-
-# Footer 页码
-officecli add "$DOCFILE" / --type footer --prop type=default --prop text="Page " --prop field=page --prop align=center
-
-officecli close "$DOCFILE"
-officecli validate "$DOCFILE"
-```
-
-### Step 11 — 生成 ASR 完整记录和总结报告（generate-report）✨
+### Step 8 — 生成 ASR 完整记录和总结报告（generate-report）
 
 调用 `generate-report` 工具，基于 ASR 转录结果生成两份专业的 Word 文档：
 
@@ -364,7 +247,7 @@ officecli validate "$DOCFILE"
 - **说话人分析**：时长分布表、内容样本
 - **完整文字稿**：带时间轴和说话人标记的全文
 
-### Step 12 — 清理视频文件
+### Step 9 — 清理视频文件
 
 ```python
 import os, shutil
@@ -382,8 +265,6 @@ for p in [f"{WORKSPACE}/video_full.mp4", f"{WORKSPACE}/segments/"]:
 - `transcript_full.json` — 全量转录 JSON
 - `transcript_detailed.txt` — 详细文字稿
 - `transcript_summary.json` — 转录总结
-- `course_ppt.pptx` — PPT 课件
-- `course_notes.docx` — Word 笔记
 - `ASR_完整记录.docx` — ASR 转录记录 Word 文档
 - `视频总结报告.docx` — 视频内容总结报告 Word 文档
 - `frames/` — 关键帧截图
@@ -395,9 +276,7 @@ for p in [f"{WORKSPACE}/video_full.mp4", f"{WORKSPACE}/segments/"]:
 | `Recorder not found` | 浏览器页面被重置 | 重新 `navigate_page` 到视频页 |
 | `sign` 过期（502/403） | JS token 过期 | 从 DevTools 重新获取 fresh streaming URL |
 | `ffprobe not found` | ffmpeg 未安装 | 安装 ffmpeg：`apt install ffmpeg` |
-| `officecli: command not found` | CLI 未加入 PATH | 重新运行安装脚本 |
 | `IndexError` SRT 解析 | 格式不匹配 | 改用 `re.split(r'\n\n+', text)` |
-| 幻灯片文字溢出 | 盒子太小 | `officecli set --prop size=14` 或 `--prop height=2.5cm` |
 | `faster-whisper` 模型下载失败 | 网络问题 | 手动下载 tiny 模型到 `~/.cache/huggingface/` |
 | 视频分片不完整 | 百度按需加载 | 滑动进度条触发更多分片请求 |
 | `ModuleNotFoundError: No module named 'docx'` | python-docx 未安装 | 执行 `pip install python-docx` |

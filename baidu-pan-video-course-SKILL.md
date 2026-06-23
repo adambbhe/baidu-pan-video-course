@@ -28,15 +28,11 @@
     ↓
 ⑦ 本地 ASR local-asr（full JSON + TXT + 说话人识别）
     ↓
-⑧ 分析内容 → 生成 PPT 课件（8页）
+⑧ 浏览器 JS 控制视频截帧（每2分钟一张）
     ↓
-⑨ 浏览器 JS 控制视频截帧（每2分钟一张）
+⑨ 生成 ASR 完整记录 + 视频总结报告（generate-report）
     ↓
-⑩ 生成 Word 文档，插入关键帧图片
-    ↓
-⑪ 生成 ASR 完整记录 + 视频总结报告（generate-report）
-    ↓
-⑫ 删除视频文件（保留字幕/ASR记录/课件/报告）
+⑩ 删除视频文件（保留字幕/ASR记录/报告）
 ```
 
 ---
@@ -57,8 +53,6 @@ WORKSPACE = "/home/adambb/.openclaw/workspace_soft/baidu_course"
 | `transcript_full.json` | 全量转录 JSON（片段+单词级时间轴+说话人标签） | ✅ 保留 |
 | `transcript_detailed.txt` | 详细文字稿（时间轴+说话人标记+分组） | ✅ 保留 |
 | `transcript_summary.json` | 转录总结（时长/说话人/片段统计） | ✅ 保留 |
-| `course_ppt.pptx` | 生成的教学课件 | ✅ 保留 |
-| `course_notes.docx` | 生成的课程笔记 | ✅ 保留 |
 | `ASR_完整记录.docx` | ASR 完整转录记录 Word 文档 | ✅ 保留 |
 | `视频总结报告.docx` | 视频内容总结报告 Word 文档 | ✅ 保留 |
 | `frames/` | 视频关键帧截图 | ✅ 保留 |
@@ -70,7 +64,6 @@ WORKSPACE = "/home/adambb/.openclaw/workspace_soft/baidu_course"
 | 工具 | 用途 | 安装方式 |
 |------|------|----------|
 | `chrome-devtools` | 浏览器控制、Network 抓包 | OpenClaw 内置插件 |
-| `officecli` | PPT 和 DOCX 生成 | `curl -fsSL https://d.officecli.ai/install.sh | bash` |
 | `python-docx` | ASR 报告 Word 文档生成 | `pip install python-docx` |
 | `faster-whisper` | 本地 ASR 语音转文字（含说话人识别） | `pip install faster-whisper` |
 | `ffmpeg` | 视频音频提取 | `apt install ffmpeg / brew install ffmpeg` |
@@ -295,72 +288,7 @@ print(f"Total entries: {len(entries)}, Duration: {entries[-1]['time']:.0f}s")
 
 ---
 
-### Step 6 — 生成 PPT 课件
-
-**配色（森林苔藓色系）：**
-
-| 角色 | 色值 |
-|------|------|
-| Primary | `#2C5F2D` |
-| Secondary | `#97BC62` |
-| Accent | `#5FAE65` |
-| Text | `#333333` |
-| Muted | `#6B8E6B` |
-
-**字体：** Georgia（标题） + Calibri（正文）
-
-**PPT 结构（8页）：**
-
-| 页 | 内容 |
-|----|------|
-| 1 | 封面：标题 + 出品方 + 口号 |
-| 2 | 课程大纲：6项目录 |
-| 3 | 风水的本质：相地 vs 补宅双卡片 |
-| 4 | 风水溯源：堪舆官职 + 共性/个性双栏 |
-| 5 | 理论基础：2×3 学科卡片网格 |
-| 6 | 占卜方法：引用框 + 传承时间线 + 案例 |
-| 7 | 历史实证：周公建洛邑三步流程 |
-| 8 | 总结思考：三大要点 + 下期预告 |
-
-**officecli 命令示例：**
-
-```bash
-WORKSPACE="/home/adambb/.openclaw/workspace_soft/baidu_course"
-FILE="${WORKSPACE}/course_ppt.pptx"
-officecli create "$FILE"
-officecli open "$FILE"
-
-# 封面
-officecli add "$FILE" / --type slide --prop layout=blank --prop background=2C5F2D
-officecli add "$FILE" /slide[1] --type shape --prop text="相地补宅风水术" \
-  --prop x=1.5cm --prop y=6cm --prop width=30cm --prop height=3cm \
-  --prop font=Georgia --prop size=44 --prop bold=true --prop color=FFFFFF --prop align=center
-
-# 卡片网格（batch 模式）
-cat <<'EOF' | officecli batch "$FILE"
-[
-  {"command":"add","parent":"/slide[3]","type":"shape","props":{"name":"Card1","preset":"roundRect","fill":"2C5F2D","line":"none","x":"1.5cm","y":"3cm","width":"14cm","height":"6cm","text":"相地\n地形评估","font":"Georgia","size":"22","bold":"true","color":"FFFFFF","align":"center","valign":"middle"}},
-  {"command":"add","parent":"/slide[3]","type":"shape","props":{"name":"Card2","preset":"roundRect","fill":"97BC62","line":"none","x":"17.5cm","y":"3cm","width":"14cm","height":"6cm","text":"补宅\n占卜决策","font":"Georgia","size":"22","bold":"true","color":"FFFFFF","align":"center","valign":"middle"}}
-]
-EOF
-
-# 检查溢出
-officecli view "$FILE" issues
-
-officecli close "$FILE"
-```
-
-**文字溢出修复：**
-```bash
-# 减小字号
-officecli set "$FILE" "/slide[N]/shape[@id=<ID>]" --prop size=14
-# 或增加盒子高度
-officecli set "$FILE" "/slide[N]/shape[@id=<ID>]" --prop height=2.5cm
-```
-
----
-
-### Step 7 — 提取关键帧
+### Step 6 — 提取关键帧
 
 浏览器 JS 控制视频跳转时间，截图保存到 workspace：
 
@@ -387,39 +315,9 @@ chrome-devtools__take_screenshot(filePath="${WORKSPACE}/frames/frame_4min.png")
 
 ---
 
-### Step 8 — 生成 Word 文档
-
-```bash
-WORKSPACE="/home/adambb/.openclaw/workspace_soft/baidu_course"
-DOCFILE="${WORKSPACE}/course_notes.docx"
-officecli create "$DOCFILE"
-officecli open "$DOCFILE"
-
-# 标题
-officecli add "$DOCFILE" /body --type paragraph --prop text="《相地补宅风水术》课程笔记" \
-  --prop style=Heading1 --prop size=24pt --prop bold=true --prop spaceAfter=12pt
-officecli add "$DOCFILE" /body --type paragraph --prop text="邯郸市风水文化研究会 · 刘大师主讲" \
-  --prop size=12pt --prop spaceAfter=24pt
-
-# 目录
-officecli add "$DOCFILE" /body --type toc --prop levels="1-3" --prop hyperlinks=true --prop title="目录"
-
-# 章节内容（基于字幕分析逐段添加）
-
-# 插入关键帧
-officecli add "$DOCFILE" "/body/p[N]" --type picture --prop src="${WORKSPACE}/frames/frame_2min.png" \
-  --prop width=6in --prop alt="视频第2分钟截图"
-
-# Footer 页码
-officecli add "$DOCFILE" / --type footer --prop type=default --prop text="Page " --prop field=page --prop align=center
-
-officecli close "$DOCFILE"
-officecli validate "$DOCFILE"
-```
-
 ---
 
-### Step 9 — 清理视频文件
+### Step 7 — 清理视频文件
 
 ```python
 import os, shutil
@@ -440,8 +338,6 @@ for p in paths:
 
 # 保留的文件
 print(f"Kept: {WORKSPACE}/subtitles.srt")
-print(f"Kept: {WORKSPACE}/course_ppt.pptx")
-print(f"Kept: {WORKSPACE}/course_notes.docx")
 ```
 
 ---
@@ -454,9 +350,7 @@ print(f"Kept: {WORKSPACE}/course_notes.docx")
 | `Overload resolution failed`（AudioNode）| Headless Chrome 音频路由限制 | 使用百度内置 AI 字幕代替 MediaRecorder |
 | `sign` 过期（502/403）| JS token 过期 | 从 DevTools 重新获取 fresh streaming URL |
 | `ffprobe not found` | ffmpeg 未安装 | 使用百度 AI 字幕代替 |
-| `officecli: command not found` | CLI 未加入 PATH | 重新运行安装脚本 |
 | `IndexError: list index out of range` | SRT 解析格式不匹配 | 改用 `re.split(r'\n\n+', srt_text)` 分割块 |
-| 幻灯片文字溢出 | 盒子太小 | `officecli set --prop size=14` 或 `--prop height=2.5cm` |
 
 ---
 
@@ -505,8 +399,6 @@ https://pan.baidu.com/share/streaming?...&type=M3U8_SUBTITLE_SRT
 | 全量转录 JSON | `workspace_soft/baidu_course/transcript_full.json` | ✅ 保留 |
 | 详细文字稿 TXT | `workspace_soft/baidu_course/transcript_detailed.txt` | ✅ 保留 |
 | 转录总结 JSON | `workspace_soft/baidu_course/transcript_summary.json` | ✅ 保留 |
-| PPTX 课件 | `workspace_soft/baidu_course/course_ppt.pptx` | ✅ 保留 |
-| DOCX 笔记 | `workspace_soft/baidu_course/course_notes.docx` | ✅ 保留 |
 | ASR 完整记录 DOCX | `workspace_soft/baidu_course/ASR_完整记录.docx` | ✅ 保留 |
 | 视频总结报告 DOCX | `workspace_soft/baidu_course/视频总结报告.docx` | ✅ 保留 |
 | 关键帧图片 | `workspace_soft/baidu_course/frames/` | ✅ 保留 |
@@ -519,7 +411,6 @@ https://pan.baidu.com/share/streaming?...&type=M3U8_SUBTITLE_SRT
 2. **百度 streaming 按需加载** — 需滑动视频进度条触发更多分片请求
 3. **Headless Chrome AudioNode 不可用** — 音频录制失败，用百度内置 AI 字幕代替
 4. **`sign` 有效期短** — 下载 223 个分片（约5-10分钟）期间可能过期，需增量刷新
-5. **officecli 批量操作** — 用 `batch` heredoc 一次性提交多个 `add`/`set` 命令，避免命令间累积错误
 
 ---
 

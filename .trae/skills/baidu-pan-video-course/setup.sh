@@ -94,33 +94,14 @@ python3 -c "import faster_whisper" 2>/dev/null && \
     log_ok "faster-whisper 安装成功 (tiny 模型将在首次运行时自动下载)" || \
     log_error "faster-whisper 安装失败"
 
-# ---------- 5. officecli ----------
-log_info "检测 officecli ..."
-if check_cmd officecli; then
-    OCLI_VER=$(officecli --version 2>/dev/null || echo "已安装")
-    log_ok "已安装: $OCLI_VER"
-else
-    log_warn "officecli 未安装，正在安装..."
-    if check_cmd curl; then
-        curl -fsSL https://d.officecli.ai/install.sh | bash 2>&1 | tail -3
-        # 刷新 PATH
-        export PATH="$HOME/.local/bin:$PATH"
-        hash -r 2>/dev/null
-        check_cmd officecli && log_ok "officecli 安装成功" || \
-            log_warn "officecli 已下载但未加入 PATH，请手动执行: export PATH=\"\$HOME/.local/bin:\$PATH\""
-    else
-        log_error "curl 未安装，请手动安装 officecli"
-    fi
-fi
-
-# ---------- 6. python-docx ----------
-log_info "安装 python-docx (用于生成 Word 报告) ..."
+# ---------- 5. python-docx ----------
+log_info "安装 python-docx (用于 ASR 报告 Word 文档生成) ..."
 python3 -m pip install python-docx -q 2>&1 | tail -1
 python3 -c "from docx import Document" 2>/dev/null && \
     log_ok "python-docx 安装成功" || \
     log_error "python-docx 安装失败"
 
-# ---------- 7. brotli (可选) ----------
+# ---------- 6. brotli (可选) ----------
 log_info "安装 brotli (可选，用于解压 br 压缩响应) ..."
 python3 -m pip install brotli -q 2>&1 | tail -1
 python3 -c "import brotli" 2>/dev/null && \
@@ -146,7 +127,6 @@ verify "Python 3"            "python3 --version"
 verify "pip"                 "python3 -m pip --version"
 verify "ffmpeg"              "ffmpeg -version"
 verify "faster-whisper"      "python3 -c 'import faster_whisper'"
-verify "officecli"           "officecli --version"
 verify "python-docx"         "python3 -c 'from docx import Document'"
 verify "brotli (可选)"       "python3 -c 'import brotli'"
 

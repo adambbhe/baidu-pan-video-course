@@ -23,15 +23,11 @@
         ↓
 ⑦ 本地 ASR local-asr（全量 JSON + TXT + 说话人识别）
         ↓
-⑧ 分析字幕内容，生成 PPT 课件（officecli）
-        ↓
-⑨ 浏览器 JS 控制视频跳转关键帧 → 截图
-        ↓
-⑩ 生成 Word 文档（officecli），插入关键帧
-        ↓
-⑪ 生成 ASR 完整记录 + 视频总结报告（generate-report, python-docx）
-        ↓
-⑫ 删除视频文件（保留字幕/ASR记录/课件/报告/截图）
+⑧ 浏览器 JS 控制视频跳转关键帧 → 截图
+    ↓
+⑨ 生成 ASR 完整记录 + 视频总结报告（generate-report, python-docx）
+    ↓
+⑩ 删除视频文件（保留字幕/ASR记录/报告/截图）
 ```
 
 ---
@@ -41,7 +37,6 @@
 | 工具 | 版本/来源 | 用途 |
 |------|----------|------|
 | **chrome-devtools** | OpenClaw 内置 | 浏览器自动化：登录、播放、Network 抓包 |
-| **officecli** | 1.0.102+ (`d.officecli.ai`) | PPT 和 DOCX 文件生成 |
 | **python-docx** | `pip install python-docx` | ASR 报告 Word 文档生成（ASR_完整记录.docx + 视频总结报告.docx） |
 | **faster-whisper** | `pip install faster-whisper` | 本地 ASR 语音转文字 + 说话人识别 |
 | **ffmpeg** | `apt install ffmpeg` | 视频音频提取（16kHz 单声道 WAV） |
@@ -170,47 +165,6 @@ def parse_srt(srt_text):
 
 ---
 
-## 五、PPT 课件生成
-
-### 5.1 工具
-`officecli` — 语义化 Office 文档 CLI，支持 PPTX 的 add/set/batch/close 模式。
-
-### 5.2 配色方案（森林苔藓色系）
-
-| 角色 | 色值 | 用途 |
-|------|------|------|
-| Primary | `#2C5F2D` | 封面背景、标题、深色卡片 |
-| Secondary | `#97BC62` | 次要卡片、浅色背景 |
-| Accent | `#5FAE65` | 按钮、高亮、强调 |
-| Text (dark) | `#333333` | 浅色背景上的正文 |
-| Text (light) | `#FFFFFF` | 深色背景上的正文 |
-| Muted | `#6B8E6B` | 标签、Caption、Footer |
-
-### 5.3 字体
-- 标题：Georgia
-- 正文：Calibri
-
-### 5.4 幻灯片结构（8页）
-
-| 页 | 类型 | 内容 |
-|----|------|------|
-| 1 | 封面 | 标题 + 出品方 + 口号 |
-| 2 | 大纲 | 6项课程目录 |
-| 3 | 内容 | 风水的本质：相地 vs 补宅双卡片 |
-| 4 | 内容 | 风水溯源：堪舆官职 + 共性/个性 |
-| 5 | 内容 | 理论基础：2×3 学科卡片网格 |
-| 6 | 内容 | 占卜方法：引用框 + 时间线 + 案例 |
-| 7 | 内容 | 历史实证：周公建洛邑三步流程 |
-| 8 | 总结 | 三大要点卡片 + 下期预告 |
-
-### 5.5 常见问题
-
-**文字溢出：** 减少字号（`--prop size=14`）或增加盒子高度（`--prop height=2.5cm`）。用 `officecli view "$FILE" issues` 检查。
-
-**Z-order：** 先添加的形状在底层，标题形状最后添加以确保在最上层。
-
----
-
 ## 六、关键帧截图
 
 ### 6.1 方法：浏览器 JS 控制 video.currentTime
@@ -234,20 +188,7 @@ chrome-devtools__take_screenshot(filePath="/tmp/frame_2min.png")
 
 ---
 
-## 七、Word 文档生成
-
-使用 `officecli` DOCX 模式，参考 officecli-docx skill。
-
-文档结构：
-1. 封面标题
-2. 目录（TOC）
-3. 各章节内容（基于字幕分析）
-4. 关键帧图片（每章节配一张）
-5. Footer 页码
-
----
-
-## 八、文件清理
+## 七、文件清理
 
 ```python
 import os, shutil
@@ -257,29 +198,27 @@ for path in [video_mp4, segments_dir]:
     elif os.path.isdir(path): shutil.rmtree(path)
 ```
 
-**保留：** 字幕 `.srt`、PPT `.pptx`、DOCX `.docx`、截帧图片
+**保留：** 字幕 `.srt`、全量转录 `.json`、详细文稿 `.txt`、ASR 记录 `.docx`、总结报告 `.docx`、截帧图片
 
 ---
 
-## 九、已知限制
+## 八、已知限制
 
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
 | `sign` 几分钟过期 | JS 动态生成，HttpOnly | 重新从 DevTools 获取新 URL |
 | 视频分片不完整 | 百度 streaming 按需加载 | 滑动进度条触发更多分片 |
 | 无法提取音频 | Headless Chrome AudioNode 限制 | 使用百度内置 AI 字幕代替 |
-| `officecli` 未安装 | PATH 未更新 | 重新运行安装脚本 |
 | 验证码阻挡登录 | 百度安全策略 | 请求用户手动输入验证码 |
 
 ---
 
-## 十、相关文件路径
+## 九、相关文件路径
 
 | 文件 | 路径 |
 |------|------|
 | 下载器脚本 | `/home/adambb/.openclaw/workspace_soft/baidu_pan_downloader.py` |
 | 字幕文件 | `/tmp/baidu_test/taibu_subtitles.srt` |
-| 课件 PPT | `/mnt/c/Users/Adambb/Desktop/太卜风水术_课件.pptx` |
 | 部分视频 | `/mnt/c/Users/Adambb/Desktop/太卜风水术01_full.mp4` (37.74 MB / ~16分钟) |
 
 ---
