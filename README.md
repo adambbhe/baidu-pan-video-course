@@ -3,7 +3,7 @@
 [![Tests](https://img.shields.io/badge/tests-52%2F52%20passed-brightgreen)](test/)
 [![E2E](https://img.shields.io/badge/e2e-19%2F19%20passed-brightgreen)](test/integration/)
 
-从百度网盘分享链接一键生成视频课件：**下载视频 → 本地 ASR 提取字幕 → 生成 PPT + Word 笔记**。
+从百度网盘分享链接一键生成视频课件：**下载视频 → 本地 ASR 提取字幕（含说话人识别） → 生成 PPT + Word 笔记 + ASR 完整记录 + 总结报告**。
 
 ## 功能
 
@@ -13,11 +13,13 @@
 | ② Network 抓包 | 拦截 `share/streaming` 请求，提取 M3U8 + Cookie |
 | ③ 并发下载 `download-video` | 8 线程下载 TS 分片 → 二进制合并 MP4（断点续传） |
 | ④ 百度 AI 字幕 | 优先获取百度服务端已有字幕（如有） |
-| ⑤ 本地 ASR `local-asr` | faster-whisper tiny 模型离线语音转文字 → SRT |
-| ⑥ PPT 生成 | officecli 森林苔藓色系 8 页课件 |
-| ⑦ 关键帧截图 | 浏览器 JS 控制视频跳转，每 2 分钟截一张 |
-| ⑧ Word 笔记 | officecli DOCX 含目录 + 章节内容 + 截图 |
-| ⑨ 清理 | 删除视频文件，保留字幕/课件/笔记 |
+| ⑤ 本地 ASR `local-asr` | faster-whisper 离线语音转文字 → SRT + 全量 JSON + 详细 TXT + 总结 |
+| ⑥ 说话人识别 | 基于 VAD 时序聚类自动标记说话人1/说话人2 |
+| ⑦ PPT 生成 | officecli 森林苔藓色系 8 页课件 |
+| ⑧ 关键帧截图 | 浏览器 JS 控制视频跳转，每 2 分钟截一张 |
+| ⑨ Word 笔记 | officecli DOCX 含目录 + 章节内容 + 截图 |
+| ⑩ ASR 报告 `generate-report` | ASR 完整记录.docx + 视频总结报告.docx |
+| ⑪ 清理 | 删除视频文件，保留字幕/课件/笔记/ASR报告 |
 
 ## 快速开始
 
@@ -40,6 +42,7 @@ python test/integration/run_e2e_test.py
 |------|------|------|
 | `chrome-devtools` | 浏览器控制 | OpenClaw 内置 |
 | `officecli` | PPT/DOCX 生成 | `curl -fsSL https://d.officecli.ai/install.sh \| bash` |
+| `python-docx` | ASR 报告 Word 文档 | `pip install python-docx` |
 | Python 3 | 脚本执行 | 系统自带 |
 | `faster-whisper` | 本地 ASR | `pip install faster-whisper` |
 | `ffmpeg` | 音频提取 | `apt install ffmpeg` / `brew install ffmpeg` |
@@ -54,9 +57,12 @@ baidu-pan-video-course/
     ├── download-video/
     │   ├── tool.yaml               # 下载工具参数定义
     │   └── run.sh                  # M3U8 解析 → 分片下载 → MP4 合并
-    └── local-asr/
-        ├── tool.yaml               # ASR 工具参数定义
-        └── run.sh                  # ffmpeg 提取音频 → faster-whisper 转录 → SRT
+    ├── local-asr/
+    │   ├── tool.yaml               # ASR 工具参数定义（增强版：全量JSON+TXT+说话人）
+    │   └── run.sh                  # ffmpeg → faster-whisper → SRT + JSON + TXT + 说话人
+    └── generate-report/
+        ├── tool.yaml               # 报告生成工具参数定义
+        └── run.sh                  # ASR 完整记录.docx + 视频总结报告.docx
 ```
 
 ## 测试

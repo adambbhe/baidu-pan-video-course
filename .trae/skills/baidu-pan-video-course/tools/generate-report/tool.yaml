@@ -1,0 +1,37 @@
+name: "generate-report"
+description: "基于 ASR 转录结果生成完整的 Word 文档（docx）和 ASR 记录文档。输出包含：封面、目录、转录概要、完整时间轴文稿（含说话人标记）、按说话人分组内容、关键帧截图、内容总结。使用 python-docx 库。"
+parameters:
+  type: object
+  properties:
+    transcript_json:
+      type: string
+      description: "transcript_full.json 的完整路径"
+    summary_json:
+      type: string
+      description: "transcript_summary.json 的完整路径"
+    output_dir:
+      type: string
+      description: "输出目录（docx 文件将保存到此目录）"
+    course_title:
+      type: string
+      description: "课程/视频标题（用于文档标题和封面）"
+      default: "视频课程"
+    frames_dir:
+      type: string
+      description: "关键帧截图目录路径（可选，用于插入到文档中）"
+      default: ""
+    include_keyframes:
+      type: boolean
+      description: "是否在文档中插入关键帧截图"
+      default: true
+  required:
+    - transcript_json
+    - summary_json
+    - output_dir
+outputs:
+  - transcript_word:
+      path: "{output_dir}/ASR_完整记录.docx"
+      description: "完整 ASR 记录 Word 文档（含全部转录、说话人标记、时间轴）"
+  - summary_word:
+      path: "{output_dir}/视频总结报告.docx"
+      description: "视频总结报告 Word 文档（摘要、要点、统计）"

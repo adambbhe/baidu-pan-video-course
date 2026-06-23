@@ -6,6 +6,7 @@ context: fork
 custom-tools:
   - "download-video"
   - "local-asr"
+  - "generate-report"
 ---
 
 # 百度网盘视频课程制作
@@ -25,6 +26,7 @@ bash setup.sh
 |------|----------|------|
 | `chrome-devtools` | OpenClaw 内置插件 | 浏览器自动化、Network 抓包 |
 | `officecli` | `curl -fsSL https://d.officecli.ai/install.sh \| bash` | PPT 和 DOCX 文件生成 |
+| `python-docx` | `pip install python-docx` | Word 报告文档生成 |
 | Python 3 | 系统自带 | 下载脚本执行 |
 | `faster-whisper` | `pip install faster-whisper` | 本地 ASR 语音转文字 |
 | `ffmpeg` | `apt install ffmpeg` / `brew install ffmpeg` | 从视频提取音频 |
@@ -42,8 +44,13 @@ bash setup.sh
 | `video_full.mp4` | 合并后的完整视频 | 完成后删除 |
 | `segments/` | TS 分片缓存目录 | 合并后删除 |
 | `subtitles.srt` | 最终字幕文件（SRT 格式） | 保留 |
+| `transcript_full.json` | 全量转录 JSON（含时间戳、置信度、单词级时间轴、说话人标签） | 保留 |
+| `transcript_detailed.txt` | 详细文字稿（含时间轴、说话人标记、按说话人分组） | 保留 |
+| `transcript_summary.json` | 转录总结（时长统计、说话人统计、各输出路径） | 保留 |
 | `course_ppt.pptx` | 生成的教学课件 | 保留 |
 | `course_notes.docx` | 生成的课程笔记 | 保留 |
+| `ASR_完整记录.docx` | ASR 完整转录记录 Word 文档（含说话人标记、时间轴、单词级详情） | 保留 |
+| `视频总结报告.docx` | 视频内容总结报告 Word 文档（摘要、要点、统计） | 保留 |
 | `frames/` | 视频关键帧截图 | 保留 |
 
 ## Workflow
@@ -158,17 +165,29 @@ SUBTITLE_URL = STREAMING_URL.replace("M3U8_AUTO_480", "M3U8_SUBTITLE_SRT")
 ```json
 {
   "video_path": "<workspace>/baidu_course/video_full.mp4",
-  "output_srt": "<workspace>/baidu_course/subtitles.srt",
+  "output_dir": "<workspace>/baidu_course",
   "language": "zh",
-  "model_size": "tiny"
+  "model_size": "tiny",
+  "enable_speaker_diarization": true,
+  "beam_size": 5
 }
 ```
 
 该工具会：
 1. 用 ffmpeg 提取视频音频为 16kHz 单声道 WAV
-2. 用 faster-whisper tiny 模型转录为文字
-3. 生成 SRT 格式字幕文件
-4. 清理临时音频文件
+2. 用 faster-whisper 模型（支持 tiny/base/small/medium）转录为文字
+3. **生成 4 个输出文件：**
+   - `subtitles.srt` — SRT 格式字幕（兼容原格式，含说话人标记）
+   - `transcript_full.json` — **全量转录 JSON**（含每段/每词的时间戳、置信度、说话人标签）
+   - `transcript_detailed.txt` — **详细文字稿**（含时间轴、说话人标记、按说话人分组）
+   - `transcript_summary.json` — **转录总结**（时长/说话人/片段统计）
+4. **说话人识别（Speaker Diarization）**：基于时序分析和语速模式自动区分说话人，标记为"说话人1/说话人2"
+5. 清理临时音频文件
+
+**增强说明：**
+- `transcript_full.json` 是核心产出，包含所有转录信息，可用于后续的 Word 报告生成和深度分析
+- 说话人识别基于 VAD 片段间的静默间隔和语速差异，无需额外模型（纯算法分析）
+- 支持的语言：zh（中文）、en（英文）、ja（日文）、ko（韩文）等
 
 ### Step 7 — 分析字幕内容，规划课件结构
 
@@ -311,7 +330,41 @@ officecli close "$DOCFILE"
 officecli validate "$DOCFILE"
 ```
 
-### Step 11 — 清理视频文件
+### Step 11 — 生成 ASR 完整记录和总结报告（generate-report）✨
+
+调用 `generate-report` 工具，基于 ASR 转录结果生成两份专业的 Word 文档：
+
+**工具调用参数：**
+```json
+{
+  "transcript_json": "<workspace>/baidu_course/transcript_full.json",
+  "summary_json": "<workspace>/baidu_course/transcript_summary.json",
+  "output_dir": "<workspace>/baidu_course",
+  "course_title": "<课程标题>",
+  "frames_dir": "<workspace>/baidu_course/frames",
+  "include_keyframes": true
+}
+```
+
+**该工具生成两份文档：**
+
+**文档 1：`ASR_完整记录.docx`**（包含）
+- **封面**：视频标题、时长、语言、说话人信息
+- **目录**：完整文档结构导航
+- **转录概要**：时长/片段/字数统计表、说话人时长分布表
+- **完整时间轴文稿**：逐段展示，每段含 `[时间戳] [说话人] 文字内容`
+- **按说话人分组内容**：每位说话人的完整发言内容及时间线
+- **单词级时间轴摘要**：片段的单词级时间戳详情
+- **转录统计**：模型参数、说话人识别算法参数
+
+**文档 2：`视频总结报告.docx`**（包含）
+- **封面**：课程标题、时长、语言、生成时间
+- **视频概览**：基础信息总览表
+- **转录统计**：片段数、字数、密度
+- **说话人分析**：时长分布表、内容样本
+- **完整文字稿**：带时间轴和说话人标记的全文
+
+### Step 12 — 清理视频文件
 
 ```python
 import os, shutil
@@ -326,8 +379,13 @@ for p in [f"{WORKSPACE}/video_full.mp4", f"{WORKSPACE}/segments/"]:
 
 保留文件：
 - `subtitles.srt` — SRT 字幕
+- `transcript_full.json` — 全量转录 JSON
+- `transcript_detailed.txt` — 详细文字稿
+- `transcript_summary.json` — 转录总结
 - `course_ppt.pptx` — PPT 课件
 - `course_notes.docx` — Word 笔记
+- `ASR_完整记录.docx` — ASR 转录记录 Word 文档
+- `视频总结报告.docx` — 视频内容总结报告 Word 文档
 - `frames/` — 关键帧截图
 
 ## 错误处理
@@ -342,6 +400,8 @@ for p in [f"{WORKSPACE}/video_full.mp4", f"{WORKSPACE}/segments/"]:
 | 幻灯片文字溢出 | 盒子太小 | `officecli set --prop size=14` 或 `--prop height=2.5cm` |
 | `faster-whisper` 模型下载失败 | 网络问题 | 手动下载 tiny 模型到 `~/.cache/huggingface/` |
 | 视频分片不完整 | 百度按需加载 | 滑动进度条触发更多分片请求 |
+| `ModuleNotFoundError: No module named 'docx'` | python-docx 未安装 | 执行 `pip install python-docx` |
+| 说话人识别不准确 | 时序聚类算法的固有限制 | 调整 `enable_speaker_diarization` 参数，或手动修正说话人标签 |
 
 ## 已知限制
 
@@ -352,6 +412,8 @@ for p in [f"{WORKSPACE}/video_full.mp4", f"{WORKSPACE}/segments/"]:
 | 无法提取音频 | Headless Chrome AudioNode 限制 | 使用本地 ffmpeg + faster-whisper |
 | 验证码阻挡登录 | 百度安全策略 | 请求用户手动输入验证码 |
 | faster-whisper 首次运行慢 | 需要下载 tiny 模型（~75MB） | 首次运行时自动下载，后续直接使用缓存 |
+| 说话人识别精度有限 | 基于时序+语速的聚类无声纹特征 | 适合对话/访谈场景，单人课程/多人重叠发言时精度下降 |
+| 长视频 Word 文档较大 | 全部转录内容嵌入 docx | 50 分钟视频的 docx 约 5-15MB，属正常范围 |
 
 ---
 

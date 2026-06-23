@@ -21,13 +21,17 @@
         ↓
 ⑥ 提取 AI 字幕（SRT）
         ↓
-⑦ 分析字幕内容，生成 PPT 课件（officecli）
+⑦ 本地 ASR local-asr（全量 JSON + TXT + 说话人识别）
         ↓
-⑧ 浏览器 JS 控制视频跳转关键帧 → 截图
+⑧ 分析字幕内容，生成 PPT 课件（officecli）
         ↓
-⑨ 生成 Word 文档（officecli），插入关键帧
+⑨ 浏览器 JS 控制视频跳转关键帧 → 截图
         ↓
-⑩ 删除视频文件（保留字幕/课件/文档）
+⑩ 生成 Word 文档（officecli），插入关键帧
+        ↓
+⑪ 生成 ASR 完整记录 + 视频总结报告（generate-report, python-docx）
+        ↓
+⑫ 删除视频文件（保留字幕/ASR记录/课件/报告/截图）
 ```
 
 ---
@@ -38,14 +42,19 @@
 |------|----------|------|
 | **chrome-devtools** | OpenClaw 内置 | 浏览器自动化：登录、播放、Network 抓包 |
 | **officecli** | 1.0.102+ (`d.officecli.ai`) | PPT 和 DOCX 文件生成 |
-| Python 3 | 标准库 | 并发下载、SRT 解析、文件合并 |
+| **python-docx** | `pip install python-docx` | ASR 报告 Word 文档生成（ASR_完整记录.docx + 视频总结报告.docx） |
+| **faster-whisper** | `pip install faster-whisper` | 本地 ASR 语音转文字 + 说话人识别 |
+| **ffmpeg** | `apt install ffmpeg` | 视频音频提取（16kHz 单声道 WAV） |
+| Python 3 | 标准库 | 并发下载、SRT 解析、文件合并、报告生成 |
 | `re` / `urllib` / `concurrent.futures` | Python 内置 | HTTP 请求、分片下载、并发控制 |
 | `gzip` / `zlib` | Python 内置 | 解压 M3U8 响应 |
 | `brotli` | `pip install brotli` (可选) | 解压 br 压缩响应 |
 
+**已安装并成为核心依赖：**
+- `ffmpeg` — 音频提取（16kHz WAV，faster-whisper 输入）
+- `faster-whisper` — 语音转文字 + 说话人识别
+
 **未成功安装（可绕过）：**
-- `ffmpeg` — 音频提取（用百度内置 AI 字幕替代）
-- `openai-whisper` — 语音转文字（用百度内置 AI 字幕替代）
 - `opencv` — 视频帧提取（用浏览器 JS 截图替代）
 
 ---

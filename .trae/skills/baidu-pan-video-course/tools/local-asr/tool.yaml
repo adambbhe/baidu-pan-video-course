@@ -1,17 +1,18 @@
 name: "local-asr"
-description: "使用 faster-whisper tiny 模型对视频进行本地离线语音识别，提取音频并生成 SRT 格式字幕文件。支持中文（zh）和英文（en）语言。首次运行会自动下载 tiny 模型（约 75MB）。"
+description: "使用 faster-whisper 模型对视频进行本地离线语音识别，提取音频并生成：① SRT 字幕 ② 全量转录 JSON（含时间戳、置信度、单词级时间轴） ③ 详细文字稿 TXT（含说话人标记） ④ 转录总结 JSON。支持说话人识别（基于时序分析聚类）。"
 parameters:
   type: object
   properties:
     video_path:
       type: string
       description: "MP4 视频文件的完整路径"
-    output_srt:
+    output_dir:
       type: string
-      description: "输出 SRT 字幕文件的完整路径"
+      description: "输出目录路径（所有输出文件将保存到此目录）"
+      default: "视频文件所在目录"
     language:
       type: string
-      description: "视频语言的 ISO 代码"
+      description: "视频语言的 ISO 代码（zh/en/ja/ko 等）"
       default: "zh"
     model_size:
       type: string
@@ -22,6 +23,27 @@ parameters:
         - "tiny.en"
         - "base"
         - "small"
+        - "medium"
+    enable_speaker_diarization:
+      type: boolean
+      description: "是否启用说话人识别（基于时序分析自动标记说话人1/说话人2）"
+      default: true
+    beam_size:
+      type: integer
+      description: "束搜索大小（越大越精确但越慢）"
+      default: 5
   required:
     - video_path
-    - output_srt
+outputs:
+  - srt:
+      path: "{output_dir}/subtitles.srt"
+      description: "SRT 格式字幕文件（兼容原格式，含说话人标记）"
+  - json:
+      path: "{output_dir}/transcript_full.json"
+      description: "全量转录 JSON（片段级+单词级时间轴、置信度、说话人标签）"
+  - txt:
+      path: "{output_dir}/transcript_detailed.txt"
+      description: "详细文字稿（含时间轴、说话人标记、按说话人分组）"
+  - summary:
+      path: "{output_dir}/transcript_summary.json"
+      description: "转录总结（时长统计、说话人统计、输出文件列表）"

@@ -26,13 +26,17 @@
     ↓
 ⑥ 提取百度 AI 字幕（SRT）
     ↓
-⑦ 分析字幕内容 → 生成 PPT 课件（8页）
+⑦ 本地 ASR local-asr（full JSON + TXT + 说话人识别）
     ↓
-⑧ 浏览器 JS 控制视频截帧（每2分钟一张）
+⑧ 分析内容 → 生成 PPT 课件（8页）
     ↓
-⑨ 生成 Word 文档，插入关键帧图片
+⑨ 浏览器 JS 控制视频截帧（每2分钟一张）
     ↓
-⑩ 删除视频文件（保留字幕/课件/文档）
+⑩ 生成 Word 文档，插入关键帧图片
+    ↓
+⑪ 生成 ASR 完整记录 + 视频总结报告（generate-report）
+    ↓
+⑫ 删除视频文件（保留字幕/ASR记录/课件/报告）
 ```
 
 ---
@@ -50,8 +54,13 @@ WORKSPACE = "/home/adambb/.openclaw/workspace_soft/baidu_course"
 | `video_full.mp4` | 合并后的完整视频 | ❌ 完成后删除 |
 | `segments/` | TS 分片缓存目录 | ❌ 合并后删除 |
 | `subtitles.srt` | 百度 AI 字幕 | ✅ 保留 |
+| `transcript_full.json` | 全量转录 JSON（片段+单词级时间轴+说话人标签） | ✅ 保留 |
+| `transcript_detailed.txt` | 详细文字稿（时间轴+说话人标记+分组） | ✅ 保留 |
+| `transcript_summary.json` | 转录总结（时长/说话人/片段统计） | ✅ 保留 |
 | `course_ppt.pptx` | 生成的教学课件 | ✅ 保留 |
 | `course_notes.docx` | 生成的课程笔记 | ✅ 保留 |
+| `ASR_完整记录.docx` | ASR 完整转录记录 Word 文档 | ✅ 保留 |
+| `视频总结报告.docx` | 视频内容总结报告 Word 文档 | ✅ 保留 |
 | `frames/` | 视频关键帧截图 | ✅ 保留 |
 
 ---
@@ -62,7 +71,10 @@ WORKSPACE = "/home/adambb/.openclaw/workspace_soft/baidu_course"
 |------|------|----------|
 | `chrome-devtools` | 浏览器控制、Network 抓包 | OpenClaw 内置插件 |
 | `officecli` | PPT 和 DOCX 生成 | `curl -fsSL https://d.officecli.ai/install.sh | bash` |
-| Python 3 | 下载、解析、合并 | 系统自带 |
+| `python-docx` | ASR 报告 Word 文档生成 | `pip install python-docx` |
+| `faster-whisper` | 本地 ASR 语音转文字（含说话人识别） | `pip install faster-whisper` |
+| `ffmpeg` | 视频音频提取 | `apt install ffmpeg / brew install ffmpeg` |
+| Python 3 | 下载、解析、合并、报告生成 | 系统自带 |
 
 **Python 标准库（无需安装）：**
 - `urllib.request` — HTTP 下载
@@ -490,8 +502,13 @@ https://pan.baidu.com/share/streaming?...&type=M3U8_SUBTITLE_SRT
 | 视频 MP4 | `workspace_soft/baidu_course/video_full.mp4` | ❌ 下载完成后删除 |
 | TS 分片目录 | `workspace_soft/baidu_course/segments/` | ❌ 合并后删除 |
 | 字幕 SRT | `workspace_soft/baidu_course/subtitles.srt` | ✅ 保留 |
+| 全量转录 JSON | `workspace_soft/baidu_course/transcript_full.json` | ✅ 保留 |
+| 详细文字稿 TXT | `workspace_soft/baidu_course/transcript_detailed.txt` | ✅ 保留 |
+| 转录总结 JSON | `workspace_soft/baidu_course/transcript_summary.json` | ✅ 保留 |
 | PPTX 课件 | `workspace_soft/baidu_course/course_ppt.pptx` | ✅ 保留 |
 | DOCX 笔记 | `workspace_soft/baidu_course/course_notes.docx` | ✅ 保留 |
+| ASR 完整记录 DOCX | `workspace_soft/baidu_course/ASR_完整记录.docx` | ✅ 保留 |
+| 视频总结报告 DOCX | `workspace_soft/baidu_course/视频总结报告.docx` | ✅ 保留 |
 | 关键帧图片 | `workspace_soft/baidu_course/frames/` | ✅ 保留 |
 
 ---

@@ -113,7 +113,14 @@ else
     fi
 fi
 
-# ---------- 6. brotli (可选) ----------
+# ---------- 6. python-docx ----------
+log_info "安装 python-docx (用于生成 Word 报告) ..."
+python3 -m pip install python-docx -q 2>&1 | tail -1
+python3 -c "from docx import Document" 2>/dev/null && \
+    log_ok "python-docx 安装成功" || \
+    log_error "python-docx 安装失败"
+
+# ---------- 7. brotli (可选) ----------
 log_info "安装 brotli (可选，用于解压 br 压缩响应) ..."
 python3 -m pip install brotli -q 2>&1 | tail -1
 python3 -c "import brotli" 2>/dev/null && \
@@ -140,6 +147,7 @@ verify "pip"                 "python3 -m pip --version"
 verify "ffmpeg"              "ffmpeg -version"
 verify "faster-whisper"      "python3 -c 'import faster_whisper'"
 verify "officecli"           "officecli --version"
+verify "python-docx"         "python3 -c 'from docx import Document'"
 verify "brotli (可选)"       "python3 -c 'import brotli'"
 
 echo ""
